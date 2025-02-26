@@ -1,0 +1,180 @@
+﻿using MultiPlayer.Server.Communications;
+using MultiPlayer.Server.Module;
+using MultiPlayer.Server.VMS;
+using System.Net;
+using System.Net.Sockets;
+
+namespace MultiPlayer.Server
+{
+
+    public interface IConnectionContainer
+    {
+        void AddConn(ActiveConnection conn);
+        void RemoveConn(ActiveConnection conn);
+        int ActiveConnCount { get; }
+    }
+
+    internal interface IServerModelInterface
+    {
+        public string Name { get; }
+        public string ModuleName { get; }
+        public string ModuleVersion { get; }
+        public int Status { get; }
+        public string StatusTxt { get; }
+        public int MaxServerCapacity { get; }
+        public int FPSTarget { get; }
+
+        public string IPAddress { get; }
+        public int Port { get; }
+        public int ActiveConnCount { get; }
+        public float RAM { get; }
+        public float CPU { get; }
+    }
+
+    internal class ServerInstance : IConnectionContainer, IServerModelInterface
+    {
+        public string Name { get; private set; }
+        public string ModuleName => _srvModule.Name;
+        public string ModuleVersion => _srvModule.GetVersion;
+        public int Status => (int)_srvModule.State;
+        public string StatusTxt => _srvModule.StateTxt;
+
+        public int MaxServerCapacity => _srvModule.MaxConnections;
+        public int FPSTarget => _srvModule.TargetFPS;
+
+        public string IPAddress => _ipAddress.ToString();
+        public int Port => _port;
+        public int ActiveConnCount => _connections.Count;
+        public float RAM => _usage_RAM;
+        public float CPU => _usage_CPU;
+
+        public ServerInstanceVM ViewModel => _VM;
+
+        private ServerInstanceVM _VM;
+        private AModule _srvModule;
+        private IPAddress _ipAddress;
+        private int _port;
+        private float _usage_RAM;//MB
+        private float _usage_CPU;//percentage
+
+        private bool IsActive = false;
+
+        private List<ActiveConnection> _connections;
+
+        //connection specifics.
+        private AConnectionProtocol _socket;
+
+        public ServerInstance(IPAddress inIP, int inPort, string name, AModule inModule)
+        {
+            Name = name;
+            _ipAddress = inIP;
+            _port = inPort;
+            _srvModule = inModule;
+            _connections = new List<ActiveConnection>();
+
+            _srvModule.SetParentContainer(this);
+            _VM = new ServerInstanceVM(this);
+        }
+
+        public void Start()
+        {
+            if (_socket != null)
+                Stop();
+
+            //_socket = AConnectionProtocol.CreateInstance(_ipAddress, _port, AConnectionProtocol.ConType.TCP_IP);
+            _socket = AConnectionProtocol.CreateInstance(_ipAddress, _port, AConnectionProtocol.ConType.UDP);
+            _socket.Start();
+            _srvModule.Start();
+
+            IsActive = true;
+            var thr = new Task(async () => { await ListeningThread(); });
+            thr.Start();
+            UpdateVM();
+        }
+
+        public void Stop()
+        {
+            if (_socket == null)
+                return;
+
+            IsActive = false;
+            _srvModule.Stop();
+
+            foreach (var conn in _connections)
+                conn.Stop();
+
+            _connections.Clear();
+
+
+            _socket.Close("Server close requested");
+            _socket = null;
+            UpdateVM();
+        }
+
+        private void ProcessConnecting()
+        {
+            _srvModule.JoinPlayer(_socket);
+            UpdateVM();
+        }
+
+        private async Task ListeningThread()
+        {
+            var frameStart = DateTime.Now;
+
+            while (IsActive)
+            {
+                var connProviders = _connections.Select(x => x.GetConnectionProvider());
+                _socket.ProcessProtocolQuirks(connProviders);
+
+                if (_socket.IsConnectionPending)
+                    ProcessConnecting();
+
+                for (int i = _connections.Count - 1; i >= 0 ; i--)
+                {
+                    var conn = _connections[i];
+                    _srvModule.CheckForIncomingData(conn);
+                }
+
+                var delta = (DateTime.Now - frameStart).TotalSeconds;
+                var frameTime = 1 / (double)_srvModule.TargetFPS;
+
+                if (delta < frameTime)//sleep
+                {
+                    var ms = (frameTime - delta) * 1000;
+                    await Task.Delay((int)ms);
+                    delta = frameTime;
+                }
+
+                _srvModule.Update(delta);
+
+                frameStart = DateTime.Now;
+
+               _srvModule.BroadcastState(_connections);
+                UpdateVM();
+            }
+        }
+
+        public void AddConn(ActiveConnection conn)
+        {
+            _connections.Add(conn);
+        }
+
+        public void RemoveConn(ActiveConnection conn)
+        {
+            if (_connections.Contains(conn))
+                _connections.Remove(conn);
+        }
+
+        internal bool AreYou(ServerInstanceVM vm)
+        {
+            return vm == _VM;
+        }
+
+        public void UpdateVM()
+        {
+            _VM?.ShoutChange();
+        }
+    }
+
+    
+}

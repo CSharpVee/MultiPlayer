@@ -1,0 +1,244 @@
+﻿using _WPFCommonBase;
+using MPClientBase.DTO;
+using System;
+using System.Net;
+using System.Text;
+using System.Text.Json;
+using System.Windows;
+using System.Windows.Controls;
+using System.Windows.Media;
+using System.Windows.Shapes;
+using System.Windows.Threading;
+
+namespace MouseInputApp
+{
+    enum Stage
+    {
+        Unconnected = 0,
+        SocketConnected,
+        JoinRequested,
+        JoinedIn,
+        NormalComms,
+    }
+
+
+    public partial class MainWindow : Window
+    {
+        private DispatcherTimer _timer;
+        private ConnectionProtocolAbstraction _conn;
+
+        private Stage _stage;
+        private DateTime _lastPing;
+
+        private SolidColorBrush _lastBrush = Brushes.Red;
+        private Point _lastPosition;
+
+
+        private List<Rectangle> pool = new List<Rectangle>();
+
+        public MainWindow()
+        {
+            InitializeComponent();
+
+            //Message pump
+            _timer = new DispatcherTimer();
+            _timer.Interval = TimeSpan.FromSeconds(1 / 60f);
+            _timer.Tick += Update;
+
+            _conn = new ConnectionProtocolAbstraction();
+
+            colorIndic.Fill = _lastBrush;
+            for (int i = 0; i < 15; i++)
+            {
+                var shape = new Rectangle
+                {
+                    Width = 5,
+                    Height = 5,
+                    Fill = new SolidColorBrush(Color.FromRgb(0,0,0))
+                };
+                Canvas.SetLeft(shape, -75); // Keep shapes within canvas
+                Canvas.SetTop(shape, 200);
+                playerCanvas.Children.Add(shape);
+                pool.Add(shape);
+            }
+
+            _timer.Start();
+        }
+
+        private void OnJoinButtonClicked(object sender, ConnectionParameters e)
+        {
+            _stage = Stage.Unconnected;
+
+            _conn.DisconnectAll();
+
+            switch (e.SelectedProtocol)
+            {
+                case ConnectionParameters.Protocol.TCP:
+                    _conn.ConnectViaTCP(e.Endpoint);
+                    break;
+                case ConnectionParameters.Protocol.UDP:
+                    _conn.ConnectViaUDP(e.Endpoint);
+                    break;
+            }
+
+            _stage = Stage.SocketConnected;
+        }
+
+        private void Update(object? sender, EventArgs e)
+        {
+            if (_stage == Stage.Unconnected)
+                return;
+
+            if (_stage < Stage.NormalComms)
+                InitializationComms();
+
+            else
+            {
+                SendLatestPosition();
+
+                PacketBase packet = null;
+                do
+                {
+                    packet = _conn.TryRetrieve();
+
+                    if (packet != null)
+                        ProcessPositions(packet.PacketData);
+                }
+                while (packet != null);
+
+                if ((DateTime.Now - _lastPing).TotalSeconds > 1.5)
+                    HeartbeatPing();
+            }
+        }
+
+        private void InitializationComms()
+        {
+            if (_stage == Stage.SocketConnected)
+            {
+                var joinpacket = ClientPacket.Construct(PacketType.ConnectJoin, new byte[0]);
+                _conn.SendSpecial(joinpacket);
+                _stage = Stage.JoinRequested;
+            }
+
+            var packet = _conn.TryRetrieve();
+
+            if (packet != null)
+            {
+                if (_stage == Stage.JoinRequested)
+                {
+                    var packetData = Encoding.ASCII.GetString(packet.PacketData);//jsonconvert, save ID, save passkey
+                    var initResponse = JsonSerializer.Deserialize<InitialCommsDTO>(packetData);
+
+                    _stage = Stage.JoinedIn;
+                    
+                    SetColorClick(null, null);
+
+                    _stage = Stage.NormalComms;
+                    connCtrls.SpinnerVisible = false;
+                }
+            }
+        }
+
+        private void HeartbeatPing()
+        {
+            var heartbeat = ClientRequest.Construct(Purpose.Heartbeat, new byte[0]);
+            var hbtPacket = ClientPacket.Construct(PacketType.NormalComms, heartbeat.GetBytes());
+            _conn.SendSpecial(hbtPacket);
+
+            _lastPing = DateTime.Now;
+        }
+
+        private void SetColorClick(object sender, RoutedEventArgs e)
+        {
+            var rgb = new byte[] { _lastBrush.Color.R, _lastBrush.Color.G, _lastBrush.Color.B };
+
+            var data = ClientRequest.Construct(Purpose.ChangeColor, rgb);
+            var packet = ClientPacket.Construct(PacketType.NormalComms, data.GetBytes());
+            _conn.SendSpecial(packet);
+        }
+
+        private void SendLatestPosition()
+        {
+            //0->400; 0->400
+            var xbytes = BitConverter.GetBytes((short)_lastPosition.X);
+            var ybytes = BitConverter.GetBytes((short)_lastPosition.Y);
+            var position = new byte[] { xbytes[0], xbytes[1], ybytes[0], ybytes[1] };
+
+            var data = ClientRequest.Construct(Purpose.SendPosition, position);
+            var packet = ClientPacket.Construct(PacketType.NormalComms, data.GetBytes());
+            _conn.SendSpecial(packet);
+        }
+
+        private void OnColorChanging(object s, System.Windows.Input.MouseButtonEventArgs e)
+        {
+            var sender = s as Image;
+            var pos = e.GetPosition(sender);
+
+            var center = new Point(sender.Width / 2, sender.Height / 2);
+            var diff = pos - center;
+            
+            var angle = HelpCalc.CalcAngle2V(new Vector(1, 0), diff);
+            if (angle < 0)
+                angle = Math.PI * 2 + angle;
+            var dist = diff.Length / (sender.Width / 2);
+            if (dist > 1)
+                dist = 1;
+
+            _lastBrush = HelpCalc.ColorCalc(dist * 100, angle / Math.PI * 180, 100);
+            colorIndic.Fill = _lastBrush;
+        }
+
+        private void OnMouseMoved(object s, System.Windows.Input.MouseEventArgs e)
+        {
+            var sender = s as Canvas;
+            var pos = e.GetPosition(sender);
+
+            _lastPosition = pos;
+        }
+
+        private void ProcessPositions(byte[] packetData)
+        {
+            var items = packetData[0];
+            for (int i = 0; i < items; i++)
+            {
+                var r = pool[i];
+                var ofst = 1 + i * 7;
+                r.Fill = new SolidColorBrush(Color.FromRgb(packetData[ofst + 0], packetData[ofst + 1], packetData[ofst + 2]));
+
+                var left = BitConverter.ToUInt16(packetData, ofst + 3);
+                var top = BitConverter.ToUInt16(packetData, ofst + 5);
+                Canvas.SetLeft(r, left);
+                Canvas.SetTop(r, top);
+            }
+        }
+    }
+
+
+
+    public enum Purpose
+    {
+        Heartbeat = 0,
+        ChangeColor = 1,
+        SendPosition = 2
+    }
+
+    public class ClientRequest
+    {
+        private byte[] Data;
+
+        protected ClientRequest() { }
+        public static ClientRequest Construct(Purpose purpose, byte[] data)
+        {
+            var length = 1 + data.Length;
+            var buffer = new byte[length];
+
+            buffer[0] = (byte)purpose;
+            if (length > 1)
+                Buffer.BlockCopy(data, 0, buffer, 1, length - 1);
+
+            return new ClientRequest { Data = buffer };
+        }
+
+        public byte[] GetBytes() => Data;
+    }
+}

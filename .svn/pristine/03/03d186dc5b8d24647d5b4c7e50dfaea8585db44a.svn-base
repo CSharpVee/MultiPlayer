@@ -1,0 +1,124 @@
+﻿using MultiPlayer.Server.DTO;
+using MultiPlayer.Server.Module;
+using System.Net;
+using System.Net.Sockets;
+
+namespace MultiPlayer.Server
+{
+
+    public interface IConnectionContainer
+    {
+        void AddConn(ActiveConnection conn);
+        void RemoveConnt(ActiveConnection conn);
+        int ActiveConnCount { get; }
+    }
+
+    internal class ServerInstance : IConnectionContainer
+    {
+        public int ActiveConnCount => _connections.Count;
+
+        private AModule _srvModule;
+        private int _port;
+
+        private bool IsActive = false;
+
+        private List<ActiveConnection> _connections;
+
+        //connection specifics.
+        private AProtocolSocket _socket;
+
+        public ServerInstance(int inPort, AModule inModule)
+        {
+            _port = inPort;
+            _srvModule = inModule;
+            _connections = new List<ActiveConnection>();
+
+            _srvModule.SetParentContainer(this);
+        }
+
+        public void Start()
+        {
+            if (_socket != null)
+                Stop();
+
+            var ipAddress = IPAddress.IPv6Loopback;
+
+            _socket = AProtocolSocket.CreateInstance(ipAddress, _port);
+            _socket.Start();
+            _srvModule.Start();
+
+            IsActive = true;
+            var thr = new Task(async () => { await ListeningThread(); });
+            thr.Start();
+        }
+
+        public void Stop()
+        {
+            IsActive = false;
+            _srvModule.Stop();
+
+            foreach (var conn in _connections)
+                conn.Stop();
+
+            _connections.Clear();
+
+
+            _socket.Close("Server close requested");
+            _socket = null;
+        }
+
+        private void ProcessConnecting()
+        {
+            _srvModule.JoinPlayer(_socket);
+        }
+
+        private async Task ListeningThread()
+        {
+            var frameStart = DateTime.Now;
+
+            while (IsActive)
+            {
+                if (_socket.IsConnectionPending)
+                    ProcessConnecting();
+
+                for (int i = _connections.Count - 1; i >= 0 ; i--)
+                {
+                    var conn = _connections[i];
+                    _srvModule.CheckForIncomingData(conn);
+                }
+
+                var delta = (DateTime.Now - frameStart).TotalSeconds;
+                var frameTime = 1 / (double)_srvModule.TargetFPS;
+
+                if (delta < frameTime)
+                {
+                    var ms = (frameTime - delta) * 1000;
+                    await Task.Delay((int)ms);
+                    delta = frameTime;
+                }
+
+                _srvModule.Update(delta);
+
+                frameStart = DateTime.Now;
+
+                foreach (var conn in _connections)
+                {
+                    _srvModule.BroadcastState(conn.ConnID, conn.Stream);
+                }
+            }
+        }
+
+        public void AddConn(ActiveConnection conn)
+        {
+            _connections.Add(conn);
+        }
+
+        public void RemoveConnt(ActiveConnection conn)
+        {
+            if (_connections.Contains(conn))
+                _connections.Remove(conn);
+        }
+    }
+
+    
+}

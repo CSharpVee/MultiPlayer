@@ -1,0 +1,141 @@
+﻿using _WPFCommonBase;
+using MPClientBase.DTO;
+using System.Net;
+using System.Text;
+using System.Windows;
+using System.Windows.Media;
+using System.Windows.Threading;
+
+namespace ConnTester
+{
+    /// <summary>
+    /// Interaction logic for MainWindow.xaml
+    /// </summary>
+    public partial class MainWindow : Window
+    {
+        private DispatcherTimer _dt;
+
+        private ConnectionProtocolAbstraction _connProtocol;
+
+        public MainWindow()
+        {
+            InitializeComponent();
+            SetIpToLocal(null, null);
+
+            _connProtocol = new ConnectionProtocolAbstraction();
+
+            _dt = new DispatcherTimer();
+            _dt.Interval = TimeSpan.FromSeconds(0.5f);
+            _dt.Tick += RefreshLines;
+            _dt.Start();
+        }
+
+        private void OnJoinButtonClicked(object sender, ConnectionParameters e)
+        {
+            _connProtocol.DisconnectAll();
+
+            try
+            {
+                switch (e.SelectedProtocol)
+                {
+                    case ConnectionParameters.Protocol.TCP:
+                        _connProtocol.ConnectViaTCP(e.Endpoint);
+                        break;
+                    case ConnectionParameters.Protocol.UDP:
+                        _connProtocol.ConnectViaUDP(e.Endpoint);
+                        break;
+                }
+
+                ShowInfo("Started");
+            }
+            catch (Exception ex)
+            {
+                ShowInfo(ex.Message, Brushes.DarkRed);
+            }
+        }
+
+        private void RefreshLines(object? sender, EventArgs e)
+        {
+            try
+            {
+                var packet = _connProtocol.TryRetrieve();
+
+                if (packet != null)
+                    serverReponses.Text += Encoding.ASCII.GetString(packet.PacketData) + "\r\n";
+            }
+            catch (Exception ex)
+            {
+                ShowInfo(ex.Message, Brushes.DarkRed);
+            }
+        }
+
+        private void SetIpToLocal(object sender, RoutedEventArgs e)
+        {
+            connCtrls.SetIpPort("127.0.0.1", "6969");
+        }
+
+        private void OnDestroyClick(object sender, RoutedEventArgs e)
+        {
+            _connProtocol.DisconnectAll();
+            ShowInfo("Closed");
+        }
+
+        private void OnSendClick(object sender, RoutedEventArgs e)
+        {
+            try
+            {
+                var type = (PacketType)int.Parse(sendType.Text);
+                var bytes = string.IsNullOrEmpty(dataToSend.Text) ? new byte[0] : Encoding.ASCII.GetBytes(dataToSend.Text);
+
+                var reconPacket = ClientPacket.Construct(type, bytes);
+                _connProtocol.SendSpecial(reconPacket);
+            }
+            catch (Exception ex)
+            {
+                ShowInfo(ex.Message, Brushes.DarkRed);
+            }
+        }
+
+        private void ShowInfo(string text, Brush? color = null)
+        {
+            if (color == null)
+                color = Brushes.Black;
+
+            infoTextField.Text = text;
+            infoTextField.Foreground = color;
+        }
+
+        private void PopulateJoinin(object sender, RoutedEventArgs e)
+        {
+            sendType.Text = "1";
+            sendLength.Text = "0";
+            dataToSend.Text = "";
+        }
+
+        private void PopulateNormal(object sender, RoutedEventArgs e)
+        {
+            sendType.Text = "4";
+            sendLength.Text = "11";
+            dataToSend.Text = "Test string";
+        }
+
+        private void PopulateDisconnect(object sender, RoutedEventArgs e)
+        {
+            sendType.Text = "3";
+            sendLength.Text = "0";
+            dataToSend.Text = "";
+        }
+
+        private void PopulateReconnect(object sender, RoutedEventArgs e)
+        {
+            sendType.Text = "2";
+            sendLength.Text = "???";
+            dataToSend.Text = "???";
+        }
+
+        private void dataToSend_TextChanged(object sender, System.Windows.Controls.TextChangedEventArgs e)
+        {
+            sendLength.Text = dataToSend.Text.Length.ToString();
+        }
+    }
+}

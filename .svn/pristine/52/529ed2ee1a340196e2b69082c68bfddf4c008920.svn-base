@@ -1,0 +1,159 @@
+﻿using System.Net;
+using System.Net.Sockets;
+
+namespace MultiPlayer.Server.Communications
+{
+    public abstract class AConnectionProtocol
+    {
+        public abstract bool IsConnectionPending { get; }
+        public enum ConType
+        {
+            TCP_IP,
+            UDP
+        }
+
+        public static AConnectionProtocol CreateInstance(IPAddress ipAddress, int port, ConType type)
+        {
+            switch (type)
+            {
+                case ConType.TCP_IP:
+                    return new TCPProtSocket(ipAddress, port);
+                case ConType.UDP:
+                    return new UDPProtSocket(ipAddress, port);
+            }
+
+            throw new ArgumentException($"What kind of protocol is this? [{type}]");
+        }
+
+        public abstract void Start();
+        public abstract void Close(string reason);//after close it becomes unusable
+
+        public abstract AClientConnection AcceptClientConnection();
+        public virtual void ProcessProtocolQuirks(IEnumerable<AClientConnection> connections)//mainly for UDP weirdness
+        {
+        }
+
+    }
+
+    internal class TCPProtSocket : AConnectionProtocol
+    {
+        public override bool IsConnectionPending => _socket.Pending();
+
+        private TcpListener _socket;
+
+        public TCPProtSocket(IPAddress ipAddress, int port)
+        {
+            _socket = new TcpListener(ipAddress, port);
+        }
+
+        public override void Close(string reason)
+        {
+            _socket.Stop();
+            _socket.Dispose();
+        }
+
+        public override void Start()
+        {
+            _socket.Start();
+        }
+
+        public override AClientConnection AcceptClientConnection()
+        {
+            var tcpClient = new TCP_ClientConnection(_socket.AcceptTcpClient());
+            return tcpClient;
+        }
+    }
+
+    internal class UDPProtSocket : AConnectionProtocol
+    {
+        private UdpClient _serverInst;
+        private IPEndPoint _ipEndPoint;
+
+
+        private IList<ByteStash> _unclaimedPackets;
+
+        public override bool IsConnectionPending => _unclaimedPackets.Count > 0;
+
+        public UDPProtSocket(IPAddress ipAddress, int port)
+        {
+            _ipEndPoint = new IPEndPoint(ipAddress, port);
+            _unclaimedPackets = new List<ByteStash>();
+        }
+
+        public override void ProcessProtocolQuirks(IEnumerable<AClientConnection> connections)
+        {
+            var sender = new IPEndPoint(1, 1);
+
+            for (int i = _unclaimedPackets.Count - 1; i >= 0; i--)
+            {
+                var packet = _unclaimedPackets[i];
+
+                var hash = IPHash(packet.Sender);
+                var targetAC = GetTargetConnection(connections, hash);
+                if (targetAC != null)
+                {
+                    targetAC.PushNewData(packet.Data);
+                    _unclaimedPackets.RemoveAt(i);
+                }
+            }
+
+            while (_serverInst.Available > 0)
+            {
+                var data = _serverInst.Receive(ref sender);
+                var hash = IPHash(sender);
+
+                var entry = new ByteStash(sender, data);
+
+                var targetAC = GetTargetConnection(connections, hash);
+                if (targetAC == null)
+                    _unclaimedPackets.Add(entry);
+                else
+                {
+                    targetAC.PushNewData(data);
+                }
+            }
+        }
+
+        public override void Close(string reason)
+        {
+            _serverInst.Dispose();
+        }
+
+        public override void Start()
+        {
+            //it autostarts immediately upon creation... i don't know how i feel about this.
+            _serverInst = new UdpClient(_ipEndPoint);
+        }
+
+        public override AClientConnection AcceptClientConnection()
+        {
+            var first = _unclaimedPackets.First();
+
+            var udpClient = new UDP_ClientConnection(_serverInst, first.Sender);
+            return udpClient;
+        }
+
+        private UDP_ClientConnection GetTargetConnection(IEnumerable<AClientConnection> connections, long hash)
+        {
+            return connections.FirstOrDefault(x => IPHash(x.Endpoint) == hash) as UDP_ClientConnection;
+        }
+
+        private long IPHash(IPEndPoint endPoint)
+        {
+            return ((long)endPoint.Address.GetHashCode() << 32) | (uint)endPoint.Port;
+        }
+
+        private class ByteStash
+        {
+            public byte[] Data;
+            public IPEndPoint Sender;
+            //public long IP_Hash;
+
+            public ByteStash(IPEndPoint inSender, byte[] inData)
+            {
+                Data = inData;
+                Sender = inSender;
+            }
+        }
+    }
+}

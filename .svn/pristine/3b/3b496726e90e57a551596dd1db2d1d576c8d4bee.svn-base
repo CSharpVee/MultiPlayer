@@ -1,0 +1,108 @@
+﻿using MPBase.DTO;
+using System.Net;
+using System.Net.Sockets;
+
+namespace ConnTester.Comms
+{
+    class ConnectionProtocolAbstraction
+    {
+        private UdpClient _udpClient;
+        private IPEndPoint _udpEndpoint;
+
+
+        private TcpClient _tcpClient;
+        private NetworkStream _tcpStream;
+
+        internal void ConnectViaTCP(IPEndPoint ipEndPoint)
+        {
+            DisconnectAll();
+            _tcpClient = new TcpClient();
+            _tcpClient.Connect(ipEndPoint);
+            _tcpStream = _tcpClient.GetStream();
+        }
+
+        public void ConnectViaUDP(IPEndPoint ipEndPoint)
+        {
+            DisconnectAll();
+            _udpEndpoint = ipEndPoint;
+            _udpClient = new UdpClient();
+        }
+
+        public void DisconnectAll()
+        {
+            _udpClient?.Dispose();
+            _tcpClient?.Dispose();
+
+            _udpClient = null;
+            _tcpClient = null;
+        }
+
+        public void Send(string data)
+        {
+            var packet = ClientPacket.Construct(PacketType.NormalComms, data);
+            SendSpecial(packet);
+        }
+
+        public void SendSpecial(PacketBase packet)
+        {
+            if (_tcpClient != null)
+                SendTCP(packet);
+
+            if (_udpClient != null)
+                SendUDP(packet);
+        }
+
+        public PacketBase TryRetrieve()
+        {
+            if (_tcpClient != null)
+                return ReceiveTCP();
+
+            if (_udpClient != null)
+                return ReceiveUDP();
+
+            return null;
+        }
+
+        private void SendTCP(PacketBase data)
+        {
+            _tcpStream.Write(data.GetBytes());
+        }
+
+        private void SendUDP(PacketBase data)
+        {
+            _udpClient.Send(data.GetBytes(), _udpEndpoint);
+        }
+
+        private PacketBase ReceiveTCP()
+        {
+            if (!_tcpStream.DataAvailable)
+                return null;
+
+            byte[] metadata = new byte[4];
+            _tcpStream.Read(metadata);
+
+            var packetLength = BitConverter.ToUInt16(metadata, 2);
+            var packetData = new byte[packetLength];
+            if (packetLength > 0)
+                _tcpStream.Read(packetData);
+
+            return ClientPacket.Construct((PacketType)metadata[0], packetData);
+        }
+
+        private PacketBase ReceiveUDP()
+        {
+            if (_udpClient.Available <= 0)
+                return null;
+
+            IPEndPoint sender = new IPEndPoint(IPAddress.Any, 0);
+            var allData = _udpClient.Receive(ref sender);
+
+            var packetLength = BitConverter.ToUInt16(allData, 2);
+            var packetData = new byte[packetLength];
+            if (packetLength > 0)
+                Buffer.BlockCopy(allData, 4, packetData, 0, packetLength);
+
+            return ClientPacket.Construct((PacketType)allData[0], packetData);
+        }
+    }
+}

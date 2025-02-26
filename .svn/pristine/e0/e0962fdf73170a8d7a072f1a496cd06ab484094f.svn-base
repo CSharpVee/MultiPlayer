@@ -1,0 +1,25 @@
+﻿namespace MultiPlayer.Server.VMS
+{
+    internal class ServerInstanceVM
+    {
+        public string ModuleType => _mapInst.ModuleName;
+        public string Name => _mapInst.Name;
+        public string ModuleVersion => _mapInst.ModuleVersion;
+        public int Status => _mapInst.Status;
+        public string StatusShortTxt => _mapInst.StatusTxt;
+        public string PlayerCounts => $"{_mapInst.ActiveConnCount}/{_mapInst.MaxServerCapacity}";
+        public string Address => $"{_mapInst.IPAddress}:{_mapInst.Port}";
+
+        public int FPSTarget => _mapInst.FPSTarget;
+        public float CPU_Usage => _mapInst.CPU;
+        public float RAM_Usage => _mapInst.RAM;
+
+
+        private IServerModelInterface _mapInst;
+
+        public ServerInstanceVM(IServerModelInterface instance)
+        {
+            _mapInst = instance;
+        }
+    }
+}

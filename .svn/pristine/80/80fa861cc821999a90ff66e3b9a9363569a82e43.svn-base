@@ -1,0 +1,121 @@
+﻿using MultiPlayer.Server.DTO;
+using System.Net.Sockets;
+using System.Text;
+
+namespace MultiPlayer.Server.Module
+{
+    public enum State
+    {
+        Unstarted = 0,
+        Starting,
+        Lobby,//players joining
+        Active,
+        Stopping,
+    }
+
+    public abstract class AModule
+    {
+        protected IConnectionContainer _parentContainer;
+        private int _lastID = 0;
+
+        public abstract string Name { get; }//DLL server's name. Aka, what's running?
+        public abstract string GetVersion { get; } //Dll version
+        public abstract string GetExpectedServerVersion { get; } //Version that this DLL expects of the server
+        public abstract int MaxConnections { get; }
+        public abstract int TargetFPS { get; }
+
+
+        public State State { get; protected set; } //Instance state
+
+
+        //lifetime events
+        public abstract void Start();
+        public abstract void Stop();
+
+        public abstract void JoinPlayer(AProtocolSocket socket);
+
+        public void CheckForIncomingData(ActiveConnection conn)
+        {
+            //this probably locks up
+            //async read until full stop, then provide full-whole "packet" to process?
+            if (conn.Stream.DataAvailable)
+            {
+                byte[] data = new byte[256];
+                conn.Stream.Read(data);
+
+                conn.LastContact = DateTime.UtcNow;
+                ProcessIncomingPacket(conn.ConnID, data);
+            }
+
+            HandleInactivity(conn);
+        }
+
+        protected abstract void ProcessIncomingPacket(int connID, byte[] data);
+        protected abstract void HandleInactivity(ActiveConnection conn);
+
+
+        public abstract void Update(double dTime);
+        public abstract void BroadcastState(int connID, NetworkStream stream);
+
+        internal void SetParentContainer(IConnectionContainer parentContainer)
+        {
+            _parentContainer = parentContainer;
+        }
+
+        //common childdren functions
+        protected int GetNextID()
+        {
+            return ++_lastID;
+        }
+
+        protected void SendGreetingMsg(ActiveConnection conn)
+        {
+            var msg = $"{{\"YourID\":{conn.ConnID}, \"MSG\":\"Welcome!\"}}";
+            conn.Stream.Write(Encoding.ASCII.GetBytes(msg));
+        }
+
+        protected void SendFarewellMsg(ActiveConnection conn)
+        {
+            var msg = $"{{\"MSG\":\"Bye bye!!\"}}";
+            conn.Stream.Write(Encoding.ASCII.GetBytes(msg));
+        }
+
+        protected void DoQuit()
+        {
+
+        }
+    }
+
+    public abstract class AHotswappableModule : AModule
+    {
+        public sealed override void JoinPlayer(AProtocolSocket socket)//do we seal it or make it overrideable by children. Probably make it overrrideable.
+        {
+            if (_parentContainer.ActiveConnCount < MaxConnections)
+            {
+                var client = socket.AcceptClientConnction();
+                var id = GetNextID();
+                var conn = new ActiveConnection(client, id);
+
+                _parentContainer.AddConn(conn);
+                SendGreetingMsg(conn);
+            }
+            else
+            {
+                socket.Close("Go away now!");
+            }
+        }
+
+        protected override void HandleInactivity(ActiveConnection conn)
+        {
+            if ((DateTime.UtcNow - conn.LastContact).TotalSeconds > 10)
+            {
+                conn.Inactive = true;
+            }
+        }
+    }
+
+    public abstract class AReconnectingModule : AModule
+    {
+
+    }
+}

@@ -1,0 +1,179 @@
+﻿using ConnTester.Comms;
+using MPClientBase.DTO;
+using System.Net;
+using System.Text;
+using System.Text.Json;
+using System.Text.Json.Serialization;
+using System.Windows;
+using System.Windows.Threading;
+
+namespace ChatApp
+{
+    enum Stage
+    {
+        Unconnected = 0,
+        SocketConnected,
+        JoinRequested,
+        JoinedIn,
+        NormalComms,
+    }
+
+
+    public partial class MainWindow : Window
+    {
+        private DispatcherTimer _timer;
+        private ConnectionProtocolAbstraction _conn;
+
+        private Stage _stage;
+        private DateTime _lastPing;
+
+        public MainWindow()
+        {
+            InitializeComponent();
+
+            //Message pump
+            _timer = new DispatcherTimer();
+            _timer.Interval = TimeSpan.FromSeconds(1 / 10f);
+            _timer.Tick += Update;
+            _timer.Start();
+
+            _conn = new ConnectionProtocolAbstraction();
+        }
+
+        private void Update(object? sender, EventArgs e)
+        {
+            if (_stage == Stage.Unconnected)
+                return;
+
+            if ( _stage < Stage.NormalComms)
+                InitializationComms();
+
+            else
+            {
+                var packet = _conn.TryRetrieve();
+
+                if (packet != null)
+                {
+                    var packetData = Encoding.ASCII.GetString(packet.PacketData);
+                    chatLines.Text += packetData + "\n";
+                }
+
+                if ((DateTime.Now - _lastPing).TotalSeconds > 1.5)
+                    HeartbeatPing();
+            }
+        }
+
+        private void InitializationComms()
+        {
+            if (_stage == Stage.SocketConnected)
+            {
+                var joinpacket = ClientPacket.Construct(PacketType.ConnectJoin, new byte[0]);
+                _conn.SendSpecial(joinpacket);
+                _stage = Stage.JoinRequested;
+            }
+
+            var packet = _conn.TryRetrieve();
+
+            if (packet != null)
+            {
+                if (_stage == Stage.JoinRequested)
+                {
+                    var packetData = Encoding.ASCII.GetString(packet.PacketData);//jsonconvert, save ID, save passkey
+                    var initResponse = JsonSerializer.Deserialize<InitialCommPackage>(packetData);
+
+                    _stage = Stage.JoinedIn;
+
+
+                    var nameSetReq = ClientRequest.Construct(Purpose.ChangeName, nameField.Text);
+                    var nameSetPacket = ClientPacket.Construct(PacketType.NormalComms, nameSetReq.GetBytes());
+                    _conn.SendSpecial(nameSetPacket);
+
+                    _stage = Stage.NormalComms;
+                }
+            }
+        }
+
+        private void JoinClick(object sender, RoutedEventArgs e)
+        {
+            _stage = Stage.Unconnected;
+
+            var ip = IPAddress.Parse(ipField.Text);
+            var port = int.Parse(portField.Text);
+            var ipEndPoint = new IPEndPoint(ip, port);
+
+            _conn.DisconnectAll();
+            if (tcpSelector.IsChecked == true)
+                _conn.ConnectViaTCP(ipEndPoint);
+            else _conn.ConnectViaUDP(ipEndPoint);
+
+            _stage = Stage.SocketConnected;
+        }
+
+        private void HeartbeatPing()
+        {
+            var heartbeat = ClientRequest.Construct(Purpose.Hearbeat);
+            var hbtPacket = ClientPacket.Construct(PacketType.NormalComms, heartbeat.GetBytes());
+            _conn.SendSpecial(hbtPacket);
+
+            _lastPing = DateTime.Now;
+        }
+
+        private void OnSendClick(object sender, RoutedEventArgs e)
+        {
+            var msgReq = ClientRequest.Construct(Purpose.SendMessage, msgField.Text);
+            var msgPacket = ClientPacket.Construct(PacketType.NormalComms, msgReq.GetBytes());
+            _conn.SendSpecial(msgPacket);
+
+            msgField.Text = "";
+            _lastPing = DateTime.Now;
+        }
+    }
+
+
+    public enum Purpose
+    {
+        Hearbeat = 0,
+        ChangeName = 1,
+        SendMessage = 2
+    }
+
+    public class ClientRequest
+    {
+        public Purpose Purpose;
+        public string Data;
+
+        protected ClientRequest() { }
+        public static ClientRequest Construct(Purpose purpose, string data = "")
+        {
+            var inst = new ClientRequest()
+            {
+                Purpose = purpose,
+                Data = data
+            };
+
+            return inst;
+        }
+
+        public byte[] GetBytes()
+        {
+            var length = 1 + Data.Length;
+            var buffer = new byte[length];
+
+            buffer[0] = (byte)Purpose;
+            if (length > 1)
+            {
+                var databytes = Encoding.ASCII.GetBytes(Data);
+                Buffer.BlockCopy(databytes, 0, buffer, 1, length - 1);
+            }
+
+            return buffer;
+        }
+    }
+
+    public class InitialCommPackage
+    {
+        public int YourID { get; set; }
+        public string YourPasskey { get; set; }
+        public string MSG { get; set; }
+    }
+}

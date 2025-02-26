@@ -1,0 +1,1 @@
+fxc /T ps_2_0 /Fo "./../PrecompiledShader/DiffuseShader.ps" DiffuseShader.fx

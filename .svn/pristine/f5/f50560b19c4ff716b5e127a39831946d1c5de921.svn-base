@@ -1,0 +1,27 @@
+﻿using MPBase.Communications;
+using MPBase.Module.Base;
+using MPBase.Utilities;
+
+namespace MPBase.Module
+{
+    public abstract class AHotswappableModule : AModule
+    {
+        protected AHotswappableModule(LogHandle logger) : base(logger)
+        {
+        }
+
+        protected override void HandleInactivity(ActiveConnection conn)
+        {
+            if ((DateTime.UtcNow - conn.LastContact).TotalSeconds > 20)
+            {
+                conn.Inactive = true;
+                _connections.Remove(conn);
+            }
+        }
+
+        protected sealed override void ProcessReconnect(ActiveConnection conn, byte[] data)
+        {
+            throw new InvalidOperationException("Reconnection attempted in a non-reconnecting module");
+        }
+    }
+}

@@ -1,0 +1,17 @@
+﻿<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <OutputType>WinExe</OutputType>
+    <TargetFramework>net8.0-windows</TargetFramework>
+    <Nullable>enable</Nullable>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <UseWPF>true</UseWPF>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\..\_WPFCommonBase\_WPFCommonBase.csproj" />
+  </ItemGroup>
+
+  <Import Project="..\ChatWithHistoryDTOs\ChatWithHistoryDTOs.projitems" Label="Shared" />
+
+</Project>

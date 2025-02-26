@@ -1,0 +1,180 @@
+﻿using ChatWithHistoryServer.TRCM_DTOs;
+using MPClientBase.DTO;
+using MPModuleBase.Module;
+using MPModuleBase.Module.Base;
+using MPModuleBase.Utilities;
+using System.Text;
+
+namespace ChatWithHistoryServer
+{
+    internal class TestReconChatBlueprint : AModuleBlueprint
+    {
+        public override string Name => "Recon Chat serv";
+
+        public override string GetVersion => "- over9000";
+
+        public override string GetExpectedServerVersion => "0.45.5";
+
+        public override int TargetFPS => 1;
+
+        public override AModule CreateInstance(LogHandle logger)
+        {
+            return new TestReconnectChatModule(logger);
+        }
+    }
+
+    internal class TestReconnectChatModule : AReconnectingModule
+    {
+        public override int MaxConnections => 14;
+
+        private List<string> _savedLines = new List<string>();
+        private bool _sendLast = false;
+        private double _elapse;
+
+        private Dictionary<int, ConnectionState> _connNames = new Dictionary<int, ConnectionState>();
+
+        public TestReconnectChatModule(LogHandle logger) : base(logger)
+        {
+        }
+
+
+        public override void BroadcastState()
+        {
+            if (_sendLast)
+            {
+                var lastMsgLine = ServerToClient.ConstructLastMsg(_savedLines.Last());
+                var lastMsgPacket = ServerPacket.Construct(PacketType.NormalComms, Sync, lastMsgLine.GetBytes());
+
+                foreach (var connection in GetOnlyActiveConnections)
+                    connection.SendPacket(lastMsgPacket);
+
+                _sendLast = false;
+            }
+
+            var historyTransfers = _connNames.Where(x => x.Value.NeedsHistoryTransfer);
+            if (historyTransfers.Any())
+            {
+                var historyData = ServerToClient.ConstructHistory(string.Join("\n", _savedLines));
+                var packet = ServerPacket.Construct(PacketType.NormalComms, Sync, historyData.GetBytes());
+
+                foreach (var connection in historyTransfers)
+                {
+                    connection.Value.NeedsHistoryTransfer = false;
+                    var conn = GetConnectionById(connection.Key);
+                    conn.SendPacket(packet);
+                }
+            }
+        }
+
+        protected override void ProcessIncomingPacket(int connID, byte[] data)
+        {
+            var message = ClientToServer.Parse(data);
+            switch (message.Purpose)
+            {
+                case Purpose.Heartbeat: break;//just ignore, AModule handles what's actually needed
+                case Purpose.ChangeName:
+                    SetName(connID, Encoding.ASCII.GetString(data, 1, data.Length - 1));
+                    break;
+                case Purpose.SendMessage:
+                    SaveNewMessage(connID, Encoding.ASCII.GetString(data, 1, data.Length - 1));
+                    break;
+
+                case Purpose.RequestChatHistory:
+                    SendBackChatHistory(connID);
+                    break;
+            }
+        }
+
+        private void SendBackChatHistory(int connID)
+        {
+            _connNames[connID].NeedsHistoryTransfer = true;
+
+        }
+
+        protected override void UpdateInternal(double dTime)
+        {
+        }
+
+        private void SetName(int connID, string newName)
+        {
+            ConnectionState entry;
+            if (_connNames.ContainsKey(connID))
+                entry = _connNames[connID];
+            else entry = new ConnectionState();
+
+            entry.AliasName = newName;
+            _connNames[connID] = entry;
+        }
+
+        private void SaveNewMessage(int connID, string msg)
+        {
+            var name = _connNames.ContainsKey(connID) ? _connNames[connID].AliasName : "???";
+            var dataStr = $"{name} : {msg}";
+            _savedLines.Add(dataStr);
+            _sendLast = true;
+        }
+    }
+
+    //DTOs
+    namespace TRCM_DTOs
+    {
+        public enum Purpose
+        {
+            Heartbeat = 0,
+            ChangeName = 1,
+            SendMessage = 2,
+            RequestChatHistory = 3,
+            //server-to-client
+            LastMessage = 4,
+            ChatHistory,
+        }
+
+        internal class ConnectionState
+        {
+            public string AliasName { get; set; }
+            public bool NeedsHistoryTransfer { get; set; } = false;
+        }
+
+
+        public class ClientToServer
+        {
+            public Purpose Purpose;
+            public byte[] Data;
+            public static ClientToServer Parse(byte[] data)
+            {
+                var purpose = (Purpose)data[0];
+                var dataBuff = new byte[data.Length - 1];
+
+                Buffer.BlockCopy(data, 1, dataBuff, 0, dataBuff.Length);
+
+                return new ClientToServer() { Purpose = purpose, Data = dataBuff };
+            }
+        }
+
+        public class ServerToClient
+        {
+            public Purpose Purpose;
+            public byte[] Data;
+
+            public byte[] GetBytes()
+            {
+                var bytes = new byte[Data.Length + 1];
+                bytes[0] = (byte)Purpose;
+                if (Data.Length > 0)
+                    Buffer.BlockCopy(Data, 0, bytes, 1, Data.Length);
+
+                return bytes;
+            }
+
+            internal static ServerToClient ConstructLastMsg(string line)
+            {
+                return new ServerToClient() { Purpose = Purpose.LastMessage, Data = Encoding.ASCII.GetBytes(line) };
+            }
+
+            internal static ServerToClient ConstructHistory(string allLines)
+            {
+                return new ServerToClient() { Purpose = Purpose.ChatHistory, Data = Encoding.ASCII.GetBytes(allLines) };
+            }
+        }
+    }
+}

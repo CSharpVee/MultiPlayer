@@ -1,0 +1,138 @@
+﻿using MPClientBase.DTO;
+using MPModuleBase.Module;
+using MPModuleBase.Module.Base;
+using MPModuleBase.Utilities;
+using TestMousePositionModule.TMPM_DTOs;
+
+namespace TestMousePositionModule
+{
+    internal class TestMousePositionBP : AModuleBlueprint
+    {
+        public override string Name => "Color Cursor";
+        public override string GetVersion => "0.001.1";
+        public override string GetExpectedServerVersion => "0.45.5";
+        public override int TargetFPS => 60;
+
+        public override AModule CreateInstance(LogHandle logger)
+        {
+            return new TestMousePositionModule(logger);
+        }
+    }
+
+    internal class TestMousePositionModule : AHotswappableModule
+    {
+
+        private Dictionary<int, PlayerPositionDTO> _players;
+
+        public TestMousePositionModule(LogHandle logger) : base(logger)
+        {
+            _players = new Dictionary<int, PlayerPositionDTO>();
+        }
+
+        public override int MaxConnections => 10;
+
+        public override void BroadcastState()
+        {
+            var length = _players.Count * (3 + 4) + 1;//3bytes color, 4 position
+            var bigbuffer = new byte[length];
+
+            bigbuffer[0] = (byte)_players.Count;
+            var index = 0;
+            foreach (var player in _players.Values)
+            {
+                Buffer.BlockCopy(player.Color, 0, bigbuffer, index * 7 + 1, 3);
+                Buffer.BlockCopy(player.Position, 0, bigbuffer, index * 7 + 1 + 3, 4);
+                index++;
+            }
+
+            var packet = ServerPacket.Construct(PacketType.NormalComms, Sync, bigbuffer);
+
+            foreach (var connection in GetOnlyActiveConnections)
+                connection.SendPacket(packet);
+        }
+
+        protected override void ProcessIncomingPacket(int connID, byte[] data)
+        {
+            var message = ClientToServer.Parse(data);
+            switch (message.Purpose)
+            {
+                case Purpose.Hearbeat: break;//just ignore, AModule handles what's needed
+                case Purpose.SetColor:
+                    SetColor(connID, message.Data);
+                    break;
+                case Purpose.SendPosition:
+                    SetPosition(connID, message.Data);
+                    break;
+            }
+        }
+
+        private void SetPosition(int connID, byte[] data)
+        {
+            if (!_players.ContainsKey(connID))
+                InitToDefault(connID);
+            _players[connID].Position = data;
+        }
+
+        private void SetColor(int connID, byte[] color)
+        {
+            if (!_players.ContainsKey(connID))
+                InitToDefault(connID);
+            _players[connID].Color = color;
+        }
+
+        private void InitToDefault(int connID)
+        {
+            _players[connID] = new PlayerPositionDTO() { Position = new byte[4], Color = new byte[3] };
+        }
+
+        protected override void UpdateInternal(double dTime)
+        {
+            //does nothing.
+            //might as well cleanup dictionary to simulate some "load".
+            //And do it the most roundabout way possible :D
+            var ids = _connections.Select(x => x.ConnID);
+
+            var removalList = new List<int>();
+
+            foreach (var entry in _players)
+                if (!ids.Contains(entry.Key))
+                    removalList.Add(entry.Key);
+
+            foreach (var entry in removalList)
+                _players.Remove(entry);
+        }
+    }
+
+    //DTOS
+    namespace TMPM_DTOs
+    {
+        public enum Purpose
+        {
+            Hearbeat = 0,
+            SetColor = 1,
+            SendPosition = 2
+        }
+
+        public class PlayerPositionDTO//from THIS server's perspective this data does not have to be meaningful. It's just a safekeep essentially.
+        {
+            public byte[] Color;
+            public byte[] Position;
+        }
+
+        public class ClientToServer
+        {
+            public Purpose Purpose;
+            public byte[] Data;
+
+            public static ClientToServer Parse(byte[] data)
+            {
+                var purpose = (Purpose)data[0];
+                var dataBuff = new byte[data.Length - 1];
+
+                Buffer.BlockCopy(data, 1, dataBuff, 0, dataBuff.Length);
+
+                return new ClientToServer() { Purpose = purpose, Data = dataBuff };
+            }
+        }
+    }
+}

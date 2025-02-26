@@ -1,0 +1,138 @@
+﻿using MPClientBase.DTO;
+using MPModuleBase.Communications;
+using MPModuleBase.Module;
+using MPModuleBase.Module.Base;
+using MPModuleBase.Utilities;
+using MultiPlayer.TestClasses.THCM_DTOs;
+using System.Text;
+
+namespace MultiPlayer.TestClasses
+{
+    internal class TestHotswapChatBP : AModuleBlueprint
+    {
+        public override string Name => "MirC HS server";
+        public override string GetVersion => "-1.1";
+        public override string GetExpectedServerVersion => "0.45.5";
+        public override int TargetFPS => 5;
+
+        public override AModule CreateInstance(LogHandle logger)
+        {
+            return new TestHotswapChatModule(logger);
+        }
+    }
+
+    internal class TestHotswapChatModule : AHotswappableModule
+    {
+        public override int MaxConnections => 50;
+
+        private List<string> _savedLines = new List<string>();
+        private bool _sendLast = false;
+        private double _elapse;
+
+        //this essentially leaks when connections drop. I know. It's just a test module. Relax! IT'S YOU WHO ARE SHOUTING!!!!
+        private Dictionary<int, string> _connNames = new Dictionary<int, string>();
+
+        public TestHotswapChatModule(LogHandle logger) : base(logger)
+        {
+
+        }
+
+        public override void BroadcastState()
+        {
+            if (!_sendLast)
+                return;
+
+            var msg = ServerToClient.ConstructLastMessageSent(_savedLines.Last());
+            var packet = ServerPacket.Construct(PacketType.NormalComms, Sync, msg.GetBytes());
+
+            foreach (var connection in GetOnlyActiveConnections)
+                connection.SendPacket(packet);
+
+            _sendLast = false;
+        }
+
+        public override void Start(AConnectionProtSocket inSocket)
+        {
+            base.Start(inSocket);
+            _elapse = 0;
+            State = State.Starting;
+        }
+
+        protected override void UpdateInternal(double dTime)
+        {
+            _elapse += dTime;
+
+            if (_elapse > 1.3f)
+                State = State.Active;
+
+            StateTxt = $"{_elapse:0.##}";
+        }
+
+        protected override void ProcessIncomingPacket(int connID, byte[] data)
+        {
+            var message = ClientToServer.Parse(data);
+            switch (message.Purpose)
+            {
+                case Purpose.Hearbeat: break;//just ignore, AModule handles what's needed
+                case Purpose.ChangeName:
+                    SetName(connID, Encoding.ASCII.GetString(message.Data));
+                    break;
+                case Purpose.SendMessage:
+                    SaveNewMessage(connID, Encoding.ASCII.GetString(message.Data));
+                    break;
+            }
+        }
+
+        private void SetName(int connID, string newName)
+        {
+            _connNames[connID] = newName;
+        }
+
+        private void SaveNewMessage(int connID, string msg)
+        {
+            var name = _connNames.ContainsKey(connID) ? _connNames[connID] : "???";
+            var dataStr = $"{name} : {msg}";
+            _savedLines.Add(dataStr);
+            _sendLast = true;
+        }
+    }
+
+    //DTOS
+    namespace THCM_DTOs
+    {
+        public enum Purpose
+        {
+            Hearbeat = 0,
+            ChangeName = 1,
+            SendMessage = 2
+        }
+
+        public class ClientToServer
+        {
+            public Purpose Purpose;
+            public byte[] Data;
+
+            public static ClientToServer Parse(byte[] data)
+            {
+                var purpose = (Purpose)data[0];
+                var dataBuff = new byte[data.Length - 1];
+
+                Buffer.BlockCopy(data, 1, dataBuff, 0, dataBuff.Length);
+
+                return new ClientToServer() { Purpose = purpose, Data = dataBuff };
+            }
+        }
+
+        public class ServerToClient
+        {
+            private byte[] Data;
+
+            public byte[] GetBytes() => Data;
+
+            public static ServerToClient ConstructLastMessageSent(string data)
+            {
+                return new ServerToClient() { Data = Encoding.ASCII.GetBytes(data) };
+            }
+        }
+    }
+}

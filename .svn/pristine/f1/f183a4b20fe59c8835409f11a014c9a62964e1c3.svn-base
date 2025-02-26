@@ -1,0 +1,253 @@
+﻿using ConnTester.Comms;
+using MPClientBase.DTO;
+using System.Net;
+using System.Text;
+using System.Text.Json;
+using System.Threading.Tasks.Dataflow;
+using System.Windows;
+using System.Windows.Threading;
+
+namespace ChatAppWithHistory
+{
+    enum Stage
+    {
+        Unconnected = 0,
+        SocketConnected,
+        TryReconnect,
+        JoinRequested,
+        JoinedIn,
+        NormalComms,
+    }
+
+
+    public partial class MainWindow : Window
+    {
+        private DispatcherTimer _timer;
+        private ConnectionProtocolAbstraction _conn;
+
+        private Stage _stage;
+        private DateTime _lastPing;
+
+        public MainWindow()
+        {
+            InitializeComponent();
+
+            //Message pump
+            _timer = new DispatcherTimer();
+            _timer.Interval = TimeSpan.FromSeconds(1 / 10f);
+            _timer.Tick += Update;
+            _timer.Start();
+
+            _conn = new ConnectionProtocolAbstraction();
+        }
+
+        private void OnReconnectClicked(object sender, RoutedEventArgs e)
+        {
+            JoinClick(null, null);
+            //there is a gap bwtween these two. A very untimely Update callback can theoretically create a race condition. But again, this is for pure testing purposes
+            _stage = Stage.TryReconnect;
+
+            var idBytes = BitConverter.GetBytes(Int32.Parse(uidField.Text));
+            var passkey = Encoding.ASCII.GetBytes(passkeyField.Text);
+
+            var finalbytes = idBytes.Concat(passkey).ToArray();
+
+            var packet = ClientPacket.Construct(PacketType.Reconnect, finalbytes);
+            _conn.SendSpecial(packet);
+
+        }
+
+        private void Update(object? sender, EventArgs e)
+        {
+            if (_stage == Stage.Unconnected)
+                return;
+
+            if (_stage == Stage.TryReconnect)
+            {
+                ReconnectionComms();
+                return;
+            }
+
+            if (_stage < Stage.NormalComms)
+                InitializationComms();
+
+            else
+            {
+                var packet = _conn.TryRetrieve();
+
+                if (packet != null)
+                {
+                    var packetData = ServerMessage.Parse(packet.PacketData);
+
+                    if (packetData.Purpose == Purpose.LastMessage)
+                        chatLines.Text += Encoding.ASCII.GetString(packetData.Data) + "\n";
+                    else if (packetData.Purpose == Purpose.ChatHistory)
+                        chatLines.Text += Encoding.ASCII.GetString(packetData.Data) + "\n";
+                }
+
+                if ((DateTime.Now - _lastPing).TotalSeconds > 1.5)
+                    HeartbeatPing();
+            }
+        }
+
+
+        private void ReconnectionComms()
+        {
+            var packet = _conn.TryRetrieve();
+
+            if (packet != null)
+            {
+                var packetData = Encoding.ASCII.GetString(packet.PacketData);//jsonconvert, save ID, save passkey
+
+                _stage = Stage.NormalComms;
+                spineroony.Visibility = Visibility.Hidden;
+            }
+        }
+
+        private void InitializationComms()
+        {
+            if (_stage == Stage.SocketConnected)
+            {
+                var joinpacket = ClientPacket.Construct(PacketType.ConnectJoin, new byte[0]);
+                _conn.SendSpecial(joinpacket);
+                _stage = Stage.JoinRequested;
+            }
+
+            var packet = _conn.TryRetrieve();
+
+            if (packet != null)
+            {
+                if (_stage == Stage.JoinRequested)
+                {
+                    var packetData = Encoding.ASCII.GetString(packet.PacketData);//jsonconvert, save ID, save passkey
+                    var initResponse = JsonSerializer.Deserialize<InitialCommsDTO>(packetData);
+
+                    uidField.Text = initResponse.YourID.ToString();
+                    passkeyField.Text = initResponse.YourPasskey;
+
+                    _stage = Stage.JoinedIn;
+
+
+                    var nameSetReq = ClientRequest.Construct(Purpose.ChangeName, nameField.Text);
+                    var nameSetPacket = ClientPacket.Construct(PacketType.NormalComms, nameSetReq.GetBytes());
+                    _conn.SendSpecial(nameSetPacket);
+
+                    _stage = Stage.NormalComms;
+                    spineroony.Visibility = Visibility.Hidden;
+                }
+            }
+        }
+
+        private void JoinClick(object sender, RoutedEventArgs e)
+        {
+            _stage = Stage.Unconnected;
+            spineroony.Visibility = Visibility.Visible;
+
+            var ip = IPAddress.Parse(ipField.Text);
+            var port = int.Parse(portField.Text);
+            var ipEndPoint = new IPEndPoint(ip, port);
+
+            _conn.DisconnectAll();
+            if (tcpSelector.IsChecked == true)
+                _conn.ConnectViaTCP(ipEndPoint);
+            else _conn.ConnectViaUDP(ipEndPoint);
+
+            _stage = Stage.SocketConnected;
+        }
+
+        private void HeartbeatPing()
+        {
+            var heartbeat = ClientRequest.Construct(Purpose.Heartbeat);
+            var hbtPacket = ClientPacket.Construct(PacketType.NormalComms, heartbeat.GetBytes());
+            _conn.SendSpecial(hbtPacket);
+
+            _lastPing = DateTime.Now;
+        }
+
+        private void OnSendClick(object sender, RoutedEventArgs e)
+        {
+            var msgReq = ClientRequest.Construct(Purpose.SendMessage, msgField.Text);
+            var msgPacket = ClientPacket.Construct(PacketType.NormalComms, msgReq.GetBytes());
+            _conn.SendSpecial(msgPacket);
+
+            msgField.Text = "";
+            _lastPing = DateTime.Now;
+        }
+
+        private void OnReqHistoryClick(object sender, RoutedEventArgs e)
+        {
+            var msgReq = ClientRequest.Construct(Purpose.RequestChatHistory);
+            var msgPacket = ClientPacket.Construct(PacketType.NormalComms, msgReq.GetBytes());
+            _conn.SendSpecial(msgPacket);
+
+            _lastPing = DateTime.Now;
+        }
+
+        private void EnterCheck(object sender, System.Windows.Input.KeyEventArgs e)
+        {
+            if (e.Key == System.Windows.Input.Key.Enter)
+                OnSendClick(sender, e);
+        }
+    }
+
+
+    public enum Purpose
+    {
+        Heartbeat = 0,
+        ChangeName = 1,
+        SendMessage = 2,
+        RequestChatHistory = 3,
+        //server-to-client
+        LastMessage = 4,
+        ChatHistory,
+    }
+
+    public class ClientRequest
+    {
+        public Purpose Purpose;
+        public string Data;
+
+        protected ClientRequest() { }
+        public static ClientRequest Construct(Purpose purpose, string data = "")
+        {
+            var inst = new ClientRequest()
+            {
+                Purpose = purpose,
+                Data = data
+            };
+
+            return inst;
+        }
+
+        public byte[] GetBytes()
+        {
+            var length = 1 + Data.Length;
+            var buffer = new byte[length];
+
+            buffer[0] = (byte)Purpose;
+            if (length > 1)
+            {
+                var databytes = Encoding.ASCII.GetBytes(Data);
+                Buffer.BlockCopy(databytes, 0, buffer, 1, length - 1);
+            }
+
+            return buffer;
+        }
+    }
+
+    public class ServerMessage
+    {
+        public Purpose Purpose;
+        public byte[] Data;
+
+        public static ServerMessage Parse(byte[] data)
+        {
+            var purpose = (Purpose)data[0];
+            var dataBuff = new byte[data.Length - 1];
+
+            Buffer.BlockCopy(data, 1, dataBuff, 0, dataBuff.Length);
+
+            return new ServerMessage() { Purpose = purpose, Data = dataBuff };
+        }
+    }
+}

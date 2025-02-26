@@ -1,0 +1,47 @@
+﻿using MultiPlayer.Server.DTO;
+using System;
+using System.Collections.Generic;
+using System.Linq;
+using System.Net.Sockets;
+using System.Text;
+using System.Threading.Tasks;
+
+namespace MultiPlayer.Server.Module
+{
+    internal class TestHotswapModule : AHotswappableModule
+    {
+        public override string Name => "MirC_Servar";
+
+        public override string GetVersion => "0.0001";
+
+        public override string GetExpectedServerVersion => "0.25";
+
+        public override int MaxConnections => 10;
+
+        public override int TargetFPS => 2;
+
+        public override void BroadcastState(int connID, NetworkStream stream)
+        {
+            throw new NotImplementedException();
+        }
+
+        public override void Start()
+        {
+            throw new NotImplementedException();
+        }
+
+        public override void Stop()
+        {
+            throw new NotImplementedException();
+        }
+
+        public override void Update(double dTime)
+        {
+        }
+
+        protected override void ProcessIncomingPacket(int connID, byte[] data)
+        {
+            throw new NotImplementedException();
+        }
+    }
+}

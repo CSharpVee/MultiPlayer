@@ -1,0 +1,39 @@
+﻿using System.Net.Sockets;
+
+namespace MultiPlayer.Server.DTO
+{
+
+    public class ActiveConnection
+    {
+        public NetworkStream Stream => _stream;
+        public int ConnID => _id;
+
+        public bool Inactive { get; internal set; }
+        public DateTime LastContact { get; set; }
+
+        private int _id;
+        private NetworkStream _stream;
+        private IClientConnection _client;
+
+        public ActiveConnection(IClientConnection client, int inID)
+        {
+            _client = client;
+            _id = inID;
+
+            _stream = _client.GetStream();
+            LastContact = DateTime.UtcNow;
+        }
+
+        public void Stop()
+        {
+            _client.Close("Stop requested");
+        }
+    }
+
+    public interface IClientConnection
+    {
+        public abstract void Close(string reason);
+        public abstract NetworkStream GetStream();
+    }
+
+}

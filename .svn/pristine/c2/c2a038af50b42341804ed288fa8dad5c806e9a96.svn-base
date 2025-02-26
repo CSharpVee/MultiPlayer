@@ -1,0 +1,102 @@
+﻿<Window x:Class="ConnTester.MainWindow"
+        xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
+        xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
+        xmlns:local="clr-namespace:ConnTester"
+        mc:Ignorable="d"
+        Title="Connection Tester" Height="450" Width="800">
+    <DockPanel>
+
+        <Grid DockPanel.Dock="Top">
+            <Grid.RowDefinitions>
+                <RowDefinition Height="30"></RowDefinition>
+                <RowDefinition Height="40"></RowDefinition>
+                <RowDefinition Height="30"></RowDefinition>
+            </Grid.RowDefinitions>
+
+            <Grid.ColumnDefinitions>
+                <ColumnDefinition Width="5*"></ColumnDefinition>
+                <ColumnDefinition Width="18"></ColumnDefinition>
+                <ColumnDefinition Width="5*"></ColumnDefinition>
+                <ColumnDefinition Width="5*"></ColumnDefinition>
+                <ColumnDefinition Width="5*"></ColumnDefinition>
+                <ColumnDefinition Width="10*"></ColumnDefinition>
+
+            </Grid.ColumnDefinitions>
+
+            <StackPanel Orientation="Horizontal" Grid.Column="0" Grid.Row="0">
+                <Label>IP</Label>
+                <Button Height="18" Width="80" Margin="10,5" Click="SetIpToLocal">Use Localhost</Button>
+            </StackPanel>
+            <TextBox x:Name="ipField" Grid.Column="0" Grid.Row="1" Margin="10,0" Height="22"></TextBox>
+
+
+            <Label Grid.Column="1" Grid.Row="0">:</Label>
+
+            <Label Grid.Column="2" Grid.Row="0">Port</Label>
+            <TextBox x:Name="portField" Grid.Column="2" Grid.Row="1" Margin="10,0" Height="22"></TextBox>
+
+            <Grid x:Name="useTcpInd" Grid.Column="3" Grid.Row="0">
+                <Button Click="TCP_Connect" Margin="10,5">Use TCP/IP</Button>
+            </Grid>
+            <Grid x:Name="useUdpInd" Grid.Column="3" Grid.Row="2">
+                <Button Click="UPD_Connect" Margin="10,5">Use UDP</Button>
+            </Grid>
+
+            <StackPanel VerticalAlignment="Center" Grid.Column="4" Grid.Row="1">
+                <Button Click="OnDestroyClick" Width="100">X → Destroy conn</Button>
+            </StackPanel>
+
+        </Grid>
+
+        <TextBlock DockPanel.Dock="Bottom" Text="Info" x:Name="infoTextField" Grid.Column="5" Grid.Row="1" Grid.RowSpan="2" Height="15" Margin="10,0,10,3"></TextBlock>
+
+        <Grid>
+            <Grid.RowDefinitions>
+                <RowDefinition Height="120"></RowDefinition>
+                <RowDefinition></RowDefinition>
+            </Grid.RowDefinitions>
+
+            <Grid Grid.Row="0" Margin="0,30,0,0">
+                
+                <Grid.RowDefinitions>
+                    <RowDefinition Height="20"></RowDefinition>
+                    <RowDefinition Height="27"></RowDefinition>
+                    <RowDefinition Height="20"></RowDefinition>
+                </Grid.RowDefinitions>
+
+                <Grid.ColumnDefinitions>
+                    <ColumnDefinition Width="50"></ColumnDefinition>
+                    <ColumnDefinition Width="70"></ColumnDefinition>
+                    <ColumnDefinition></ColumnDefinition>
+                    <ColumnDefinition Width="150"></ColumnDefinition>
+                </Grid.ColumnDefinitions>
+
+                <StackPanel Orientation="Horizontal" Grid.ColumnSpan="4">
+                    <Button Click="PopulateJoinin" Margin="20, 0">Join In</Button>
+                    <Button Click="PopulateReconnect" Margin="20, 0">Reconnect</Button>
+                    <Button Click="PopulateDisconnect" Margin="20, 0">Disconnect</Button>
+                    <Button Click="PopulateNormal" Margin="20, 0">Normal</Button>
+                </StackPanel>
+                
+
+                <Label Grid.Row="1" Grid.Column="0">Type</Label>
+                <TextBox Grid.Row="2" Grid.Column="0" x:Name="sendType" Margin="7, 0">4</TextBox>
+
+                <Label Grid.Row="1" Grid.Column="1">Length</Label>
+                <TextBox Grid.Row="2" Grid.Column="1" x:Name="sendLength" Margin="7, 0" IsEnabled="False">11</TextBox>
+
+                <Label Grid.Row="1" Grid.Column="2">Data</Label>
+                <TextBox Grid.Row="2" Grid.Column="2" x:Name="dataToSend" Margin="7, 0" TextChanged="dataToSend_TextChanged">Test string</TextBox>
+
+                <Button Grid.Row="2" Grid.Column="3" Click="OnSendClick" Margin="0" Width="80">Send</Button>
+
+            </Grid>
+            
+            <ScrollViewer Grid.Row="1">
+                <TextBlock x:Name="serverReponses"></TextBlock>
+            </ScrollViewer>
+        </Grid>
+    </DockPanel>
+</Window>

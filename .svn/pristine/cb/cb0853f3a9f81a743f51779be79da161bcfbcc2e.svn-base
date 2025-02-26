@@ -1,0 +1,82 @@
+﻿<Window x:Class="ChatAppWithHistory.MainWindow"
+        xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
+        xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
+        xmlns:local="clr-namespace:ChatAppWithHistory"
+        xmlns:customUI="clr-namespace:ConnTester.Comms"
+        mc:Ignorable="d"
+        Title="MainWindow" Height="450" Width="800">
+    <DockPanel>
+        <Grid Height="60" DockPanel.Dock="Top">
+            <Grid.ColumnDefinitions>
+                <ColumnDefinition Width="80"></ColumnDefinition>
+                <ColumnDefinition Width="200"></ColumnDefinition>
+                <ColumnDefinition Width="80"></ColumnDefinition>
+                <ColumnDefinition Width="200"></ColumnDefinition>
+                <ColumnDefinition Width="100"></ColumnDefinition>
+                <ColumnDefinition></ColumnDefinition>
+            </Grid.ColumnDefinitions>
+
+            <Grid.RowDefinitions>
+                <RowDefinition></RowDefinition>
+                <RowDefinition Height="25"></RowDefinition>
+            </Grid.RowDefinitions>
+
+            <StackPanel Grid.Row="0" Grid.Column="0" Grid.RowSpan="2" VerticalAlignment="Center" Margin="10, 0">
+                <RadioButton IsChecked="True" x:Name="tcpSelector">TCP/IP</RadioButton>
+                <RadioButton>UDP</RadioButton>
+            </StackPanel>
+
+            <Label Grid.Row="0" Grid.Column="1">IP</Label>
+            <TextBox Grid.Row="1" Grid.Column="1" Margin="10, 0" x:Name="ipField">127.0.0.1</TextBox>
+
+            <Label Grid.Row="0" Grid.Column="2">Port</Label>
+            <TextBox Grid.Row="1" Grid.Column="2" Margin="10, 0" x:Name="portField">6969</TextBox>
+
+            <Label Grid.Row="0" Grid.Column="3">Name</Label>
+            <TextBox Grid.Row="1" Grid.Column="3" Margin="10, 0" x:Name="nameField">Dyk</TextBox>
+
+            <Button Grid.Row="1" Grid.Column="4" Click="JoinClick">Join</Button>
+
+            <customUI:LoadingSpinner Grid.Row="1" Grid.Column="5" x:Name="spineroony" Visibility="Hidden"></customUI:LoadingSpinner>
+        </Grid>
+
+        <Expander DockPanel.Dock="Top" Background="AntiqueWhite" Header="Reconnecting" Margin="10">
+            <Expander.Content>
+                <Grid>
+                    <Grid.RowDefinitions>
+                        <RowDefinition></RowDefinition>
+                        <RowDefinition></RowDefinition>
+                    </Grid.RowDefinitions>
+
+                    <Grid.ColumnDefinitions>
+                        <ColumnDefinition Width="120"></ColumnDefinition>
+                        <ColumnDefinition></ColumnDefinition>
+                        <ColumnDefinition Width="120"></ColumnDefinition>
+                        <ColumnDefinition></ColumnDefinition>
+                    </Grid.ColumnDefinitions>
+
+                    <Label Grid.Row="0" Grid.Column="0">UID</Label>
+                    <TextBox Grid.Row="1" Grid.Column="0" Margin="15,0" x:Name="uidField"></TextBox>
+                    <Label Grid.Row="0" Grid.Column="1">Passkey</Label>
+                    <TextBox Grid.Row="1" Grid.Column="1" Margin="15,0" x:Name="passkeyField"></TextBox>
+                    <Button Grid.Row="1" Grid.Column="2" Margin="15,0" Click="OnReconnectClicked">Reconnect</Button>
+                </Grid>
+            </Expander.Content>
+        </Expander>
+
+        <Grid Height="30" DockPanel.Dock="Top" Margin="10, 15">
+            <StackPanel Orientation="Horizontal">
+                <TextBox Width="400" x:Name="msgField" KeyUp="EnterCheck"></TextBox>
+                <Button Margin="10, 5" Width="100" Click="OnSendClick">Send</Button>
+                <Button Margin="120, 5,0,5" Width="100" Click="OnReqHistoryClick">Request Histr.</Button>
+            </StackPanel>
+
+        </Grid>
+
+        <ScrollViewer>
+            <TextBlock x:Name="chatLines"></TextBlock>
+        </ScrollViewer>
+    </DockPanel>
+</Window>

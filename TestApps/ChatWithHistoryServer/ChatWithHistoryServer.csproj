@@ -1,0 +1,15 @@
+﻿<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <TargetFramework>net8.0</TargetFramework>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <Nullable>enable</Nullable>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\..\MinimalNetcode\MPModuleBase\MPModuleBase.csproj" />
+  </ItemGroup>
+
+  <Import Project="..\ChatWithHistoryDTOs\ChatWithHistoryDTOs.projitems" Label="Shared" />
+
+</Project>

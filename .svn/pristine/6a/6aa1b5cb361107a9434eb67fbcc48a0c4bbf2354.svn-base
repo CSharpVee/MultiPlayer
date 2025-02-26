@@ -1,0 +1,93 @@
+﻿using ConnTester.Comms;
+using MultiPlayer.Server.DTO;
+using System.Net;
+using System.Text;
+using System.Windows;
+using System.Windows.Media;
+using System.Windows.Threading;
+
+namespace ConnTester
+{
+    /// <summary>
+    /// Interaction logic for MainWindow.xaml
+    /// </summary>
+    public partial class MainWindow : Window
+    {
+        private DispatcherTimer _dt;
+
+        private ConnectionProtocolAbstraction _connProtocol;
+
+        public MainWindow()
+        {
+            InitializeComponent();
+            SetIpToLocal(null, null);
+            
+            _connProtocol = new ConnectionProtocolAbstraction();
+
+            _dt = new DispatcherTimer();
+            _dt.Interval = TimeSpan.FromSeconds(0.5f);
+            _dt.Tick += RefreshLines;
+            _dt.Start();
+        }
+
+        private void RefreshLines(object? sender, EventArgs e)
+        {
+            var packet = _connProtocol.TryRetrieve();
+
+            if (packet != null)
+                serverReponses.Text += Encoding.ASCII.GetString(packet.PacketData) + "\r\n";
+        }
+
+        private void SetIpToLocal(object sender, RoutedEventArgs e)
+        {
+            ipField.Text = "127.0.0.1";
+            portField.Text = "6969";
+        }
+
+        private void TCP_Connect(object sender, RoutedEventArgs e)
+        {
+            var ip = IPAddress.Parse(ipField.Text);
+            var port = int.Parse(portField.Text);
+            var ipEndPoint = new IPEndPoint(ip, port);
+
+            _connProtocol.ConnectViaTCP(ipEndPoint);
+
+            useTcpInd.Background = Brushes.LightGreen;
+        }
+
+        private void UPD_Connect(object sender, RoutedEventArgs e)
+        {
+            var ip = IPAddress.Parse(ipField.Text);
+            var port = int.Parse(portField.Text);
+            var ipEndPoint = new IPEndPoint(ip, port);
+
+            _connProtocol.ConnectViaUDP(ipEndPoint);
+
+            useUdpInd.Background = Brushes.LightGreen;
+        }
+
+        private void OnDestroyClick(object sender, RoutedEventArgs e)
+        {
+            _connProtocol.DisconnectAll();
+            useTcpInd.Background = Brushes.Transparent;
+            useUdpInd.Background = Brushes.Transparent;
+        }
+
+        private void OnSendClick(object sender, RoutedEventArgs e)
+        {
+            _connProtocol.Send(dataToSend.Text);
+        }
+
+        private void OnServerDisconnectClick(object sender, RoutedEventArgs e)
+        {
+            var discPacket = ClientPacket.Construct(PacketType.Disconnect, new byte[0]);
+            _connProtocol.SendSpecial(discPacket);
+        }
+
+        private void OnReconnectClick(object sender, RoutedEventArgs e)
+        {
+            var reconPacket = ClientPacket.Construct(PacketType.Reconnect, new byte[0]);
+            _connProtocol.SendSpecial(reconPacket);
+        }
+    }
+}

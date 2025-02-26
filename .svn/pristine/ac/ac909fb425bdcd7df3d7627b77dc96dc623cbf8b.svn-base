@@ -1,0 +1,76 @@
+﻿<Window x:Class="ConnTester.MainWindow"
+        xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
+        xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
+        xmlns:local="clr-namespace:ConnTester"
+        xmlns:customUI="clr-namespace:_WPFCommonBase;assembly=_WPFCommonBase"
+        mc:Ignorable="d"
+        Title="Connection Tester" Height="450" Width="800">
+    <DockPanel>
+
+        <customUI:BaseConnectorControls DockPanel.Dock="Top" x:Name="connCtrls" OnJoinClicked="OnJoinButtonClicked"></customUI:BaseConnectorControls>
+
+        <Grid DockPanel.Dock="Top" Margin="20, 20">
+            <Grid.ColumnDefinitions>
+                <ColumnDefinition Width="250"></ColumnDefinition>
+                <ColumnDefinition Width="100"></ColumnDefinition>
+                <ColumnDefinition Width="150"></ColumnDefinition>
+                <ColumnDefinition></ColumnDefinition>
+                <ColumnDefinition></ColumnDefinition>
+            </Grid.ColumnDefinitions>
+
+            <Button Grid.Column="0"  Width="80"  Click="SetIpToLocal">Use Localhost</Button>
+            <Button Grid.Column="2" Click="OnDestroyClick" Width="100">X → Destroy conn</Button>
+        </Grid>
+        
+        <TextBlock DockPanel.Dock="Bottom" Text="Info" x:Name="infoTextField" Grid.Column="5" Grid.Row="1" Grid.RowSpan="2" Height="15" Margin="10,0,10,3"></TextBlock>
+
+        <Grid>
+            <Grid.RowDefinitions>
+                <RowDefinition Height="120"></RowDefinition>
+                <RowDefinition></RowDefinition>
+            </Grid.RowDefinitions>
+
+            <Grid Grid.Row="0" Margin="0,30,0,0">
+                
+                <Grid.RowDefinitions>
+                    <RowDefinition Height="20"></RowDefinition>
+                    <RowDefinition Height="27"></RowDefinition>
+                    <RowDefinition Height="20"></RowDefinition>
+                </Grid.RowDefinitions>
+
+                <Grid.ColumnDefinitions>
+                    <ColumnDefinition Width="50"></ColumnDefinition>
+                    <ColumnDefinition Width="70"></ColumnDefinition>
+                    <ColumnDefinition></ColumnDefinition>
+                    <ColumnDefinition Width="150"></ColumnDefinition>
+                </Grid.ColumnDefinitions>
+
+                <StackPanel Orientation="Horizontal" Grid.ColumnSpan="4">
+                    <Button Click="PopulateJoinin" Margin="20, 0">Join In</Button>
+                    <Button Click="PopulateReconnect" Margin="20, 0">Reconnect</Button>
+                    <Button Click="PopulateDisconnect" Margin="20, 0">Disconnect</Button>
+                    <Button Click="PopulateNormal" Margin="20, 0">Normal</Button>
+                </StackPanel>
+                
+
+                <Label Grid.Row="1" Grid.Column="0">Type</Label>
+                <TextBox Grid.Row="2" Grid.Column="0" x:Name="sendType" Margin="7, 0">4</TextBox>
+
+                <Label Grid.Row="1" Grid.Column="1">Length</Label>
+                <TextBox Grid.Row="2" Grid.Column="1" x:Name="sendLength" Margin="7, 0" IsEnabled="False">11</TextBox>
+
+                <Label Grid.Row="1" Grid.Column="2">Data</Label>
+                <TextBox Grid.Row="2" Grid.Column="2" x:Name="dataToSend" Margin="7, 0" TextChanged="dataToSend_TextChanged">Test string</TextBox>
+
+                <Button Grid.Row="2" Grid.Column="3" Click="OnSendClick" Margin="0" Width="80">Send</Button>
+
+            </Grid>
+            
+            <ScrollViewer Grid.Row="1">
+                <TextBlock x:Name="serverReponses"></TextBlock>
+            </ScrollViewer>
+        </Grid>
+    </DockPanel>
+</Window>

@@ -1,0 +1,48 @@
+﻿using System.Net;
+using MultiPlayer.Server.Communications.Base;
+using MultiPlayer.Server.DTO;
+
+namespace MultiPlayer.Server.Communications
+{
+    public class ActiveConnection
+    {
+        public AClientConnection GetConnectionProvider() => _clientConn;
+        public IPEndPoint Endpoint => _clientConn.Endpoint;
+        public int ConnID => _id;
+        public bool DataAvailable => _clientConn.IsDataAvailable;
+        public bool Inactive { get; internal set; }//heartbeat lost
+        public DateTime LastContact { get; set; }
+
+        private int _id;
+        private AClientConnection _clientConn;
+
+        public ActiveConnection(AClientConnection inClient, int inID)
+        {
+            _clientConn = inClient;
+            _id = inID;
+
+            LastContact = DateTime.UtcNow;
+        }
+
+        public void Stop()
+        {
+            _clientConn.Close("Stop requested");
+        }
+
+        public void SendPacket(PacketBase packet)
+        {
+            _clientConn.SendBytes(packet.GetBytes());
+        }
+
+        public ClientPacket ReceivePacket()
+        {
+            var metadata = _clientConn.ReceiveBytes(3);
+
+            var packetLength = BitConverter.ToUInt16(metadata, 1);
+            var packetData = (packetLength > 0)? _clientConn.ReceiveBytes(packetLength) : new byte[0];
+
+            return ClientPacket.Construct((PacketType)metadata[0], packetData);
+        }
+    }
+
+}

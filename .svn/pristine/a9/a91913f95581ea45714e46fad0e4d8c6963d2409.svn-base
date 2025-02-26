@@ -1,0 +1,24 @@
+﻿namespace MultiPlayer.TestClasses
+{
+    public class VMTest //to quicktest ui
+    {
+        public string[] ServerNames { get; }
+        public VMpm[] ActiveModules { get; }
+
+        public VMTest()
+        {
+            var servers = new[] { "Dopatwo", "Mirc", "some other shit" };
+
+            var activeModules = new[]
+            {
+                new VMpm() { Name = "Dopatwo", ModuleV = "1.1513.13", Status = 0, PlayerCount = 3, PlayerMax = 5, IP = "1.5.153.21", Port = 69},
+                new VMpm() { Name = "MiRC", ModuleV = "10.22.416", Status = 1, PlayerCount = 82, PlayerMax = 914, IP = "1.5.153.21", Port = 8080},
+                new VMpm() { Name = "SSSanke", ModuleV = "0.99", Status = 2, PlayerCount = 1, PlayerMax = 2, IP = "1.5.153.21", Port = 1}
+            };
+
+            ServerNames = servers;
+            ActiveModules = activeModules;
+        }
+    }
+
+}

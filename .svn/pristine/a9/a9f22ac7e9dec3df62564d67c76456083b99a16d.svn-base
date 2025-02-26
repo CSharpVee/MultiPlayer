@@ -1,0 +1,24 @@
+﻿<UserControl x:Class="MultiPlayer.UILements.StatusBulb"
+             xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006" 
+             xmlns:d="http://schemas.microsoft.com/expression/blend/2008" 
+             xmlns:local="clr-namespace:MultiPlayer.UILements"
+             xmlns:shdrs="clr-namespace:MultiPlayer.UIShaders"
+             mc:Ignorable="d" 
+             d:DesignHeight="64" d:DesignWidth="64"
+             
+             >
+    <UserControl.Resources>
+        <shdrs:DiffuseColorFX x:Key="tintFx" DiffuseColor="{Binding InternalStateColor, RelativeSource={RelativeSource AncestorType=local:StatusBulb}}"/>
+    </UserControl.Resources>
+
+    <StackPanel Orientation="Horizontal">
+        <Image Source="pack://application:,,,/GFX/StateBulb.png" Width="32" Height="32">
+            <Image.Effect>
+                <StaticResource ResourceKey="tintFx"/>
+            </Image.Effect>
+        </Image>
+        <Label Content="{Binding StatusText, RelativeSource={RelativeSource AncestorType=local:StatusBulb}}" d:Content="Stats" VerticalAlignment="Center"></Label>
+    </StackPanel>
+</UserControl>

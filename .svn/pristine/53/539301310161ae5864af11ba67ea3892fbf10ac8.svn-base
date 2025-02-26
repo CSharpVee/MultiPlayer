@@ -1,0 +1,85 @@
+﻿using System.Collections.ObjectModel;
+using System.IO;
+using System.Text;
+using System.Windows;
+using System.Windows.Controls;
+using System.Windows.Data;
+using System.Windows.Documents;
+using System.Windows.Input;
+using System.Windows.Media;
+using System.Windows.Media.Imaging;
+using System.Windows.Navigation;
+using System.Windows.Shapes;
+
+namespace MultiPlayer
+{
+    /// <summary>
+    /// Interaction logic for MainWindow.xaml
+    /// </summary>
+    public partial class MainWindow : Window
+    {
+        private ObservableCollection<VMpm> _activeServers;
+
+        public MainWindow()
+        {
+            InitializeComponent();
+
+            var servers = new []{ "Dopatwo", "Mirc", "some other shit"};
+            modulesDropbox.ItemsSource = servers;
+
+            _activeServers = new ObservableCollection<VMpm>();
+            var list = new List<VMpm>()
+            {
+                new VMpm() { Name = "Dopatwo", ModuleV = "1.1513.13", Status = 0, PlayerCount = 3, PlayerMax = 5, IP = "1.5.153.21", Port = 69},
+                new VMpm() { Name = "MiRC", ModuleV = "10.22.416", Status = 1, PlayerCount = 82, PlayerMax = 914, IP = "1.5.153.21", Port = 8080},
+                new VMpm() { Name = "SSSanke", ModuleV = "0.99", Status = 2, PlayerCount = 1, PlayerMax = 2, IP = "1.5.153.21", Port = 1}
+            };
+            foreach (var server in list)
+                _activeServers.Add(server);
+
+            itemStatus.ItemsSource = _activeServers;
+        }
+
+        private void PlayClicked(object sender, MouseButtonEventArgs e)
+        {
+            if (sender is Image image && image.DataContext is VMpm item)
+            {
+                var itemtt = item.CPU;
+                // 'item' is now the data item for the row where the image was clicked
+                // Perform your action here
+            }
+        }
+
+        private void PauseClicked(object sender, MouseButtonEventArgs e)
+        {
+
+        }
+
+        private void RemoveClicked(object sender, MouseButtonEventArgs e)
+        {
+            var item = (sender as Image).DataContext as VMpm;
+            _activeServers.Remove(item);
+
+        }
+    }
+
+    public class VMpm
+    {
+        public string Name { get; set; }
+        public string ModuleV { get; set; }
+        public int Status { get; set; }
+        public int PlayerCount { get; set; }
+        public int PlayerMax { get; set; }
+
+        public string IP { get; set; }//It can only really be localhost. so kinda redundant... maybe show external IP
+        public int Port { get; set; }
+
+        public float CPU { get; set; } = 15;
+        public float RAM { get; set; } = 585;
+        public int FPS { get; set; } = 60;
+
+        public string IPPortDisplay => $"{IP} : {Port}";
+        public string PlayerCtDisplay => $"{PlayerCount} / {PlayerMax}";
+    }
+
+}
